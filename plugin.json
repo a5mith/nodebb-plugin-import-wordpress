@@ -1,0 +1,11 @@
+{
+	"id": "nodebb-plugin-import-wordpress",
+	"name": "nodebb-plugin-import-wordpress",
+	"description": "Export your Wordpress sites posts and comments into NodeBB",
+	"url": "https://github.com/a5mith/nodebb-plugin-import-wordpress",
+	"library": "./admin/index.js",
+	"hooks": [
+		{ "hook": "filter:admin.header.build", "method": "admin.menu", "callbacked": false },
+		{ "hook": "filter:admin.create_routes", "method": "admin.route", "callbacked": true }
+	]
+}
