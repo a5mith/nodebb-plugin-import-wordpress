@@ -22,7 +22,7 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
         };
 
         Exporter.config(_config);
-        Exporter.config('prefix', config.prefix || config.tablePrefix || 'wp_');
+        Exporter.config('prefix', config.prefix || config.tablePrefix || '');
 
         Exporter.connection = mysql.createConnection(_config);
         Exporter.connection.connect();
@@ -35,7 +35,6 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
     };
     Exporter.getPaginatedUsers = function(start, limit, callback) {
         callback = !_.isFunction(callback) ? noop : callback;
-        var err;
         var prefix = Exporter.config('prefix');
         var startms = +new Date();
         var query = 'SELECT '
@@ -123,9 +122,11 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
             });
     };
 
-    /*
 
-    // i need a WP Db with more Categories, topics and tags :/
+
+    //todo : combine the getTags query with the getTopics?
+    // I don't know how to do, need mysql guru
+    // http://wordpress.stackexchange.com/questions/169863/wordpress-custom-sql-query-get-all-posts-with-category-id-and-a-concated-list
 
     var getTags = function(callback) {
         return getPaginatedTags(0, -1, callback);
@@ -133,18 +134,27 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
     var getPaginatedTags = function(start, limit, callback) {
         callback = !_.isFunction(callback) ? noop : callback;
         var prefix = Exporter.config('prefix');
-        var startms = +new Date();
+
         var query =
             'SELECT '
-            + prefix + 'terms.term_id as _wp_tag_id, '
-            + prefix + 'terms.name as _wp_tag_name, '
-            + prefix + 'terms.slug as _wp_tag_slug, '
-            + prefix + 'term_taxonomy.object_id as _tid '
+            + prefix + 'terms.term_id as _tag_id, '
+            + prefix + 'terms.name as _name, '
+            + prefix + 'terms.slug as _slug, '
+            + prefix + 'term_relationships.object_id as _tid '
+
             + 'FROM ' + prefix + 'terms '
-            + 'LEFT JOIN ' + prefix + 'term_taxonomy ON ' + prefix + 'term_taxonomy.term_id=' + prefix + 'terms.term_id '
-            + 'AND '
-            + prefix + 'term_taxonomy.taxonomy="topic-tag" '
+
+            + 'LEFT JOIN ' + prefix + 'term_relationships '
+            + 'ON ' + prefix + 'terms.term_id = ' + prefix + 'term_relationships.term_taxonomy_id '
+
+            + 'LEFT JOIN ' + prefix + 'term_taxonomy '
+            + 'ON ' + prefix + 'term_relationships.term_taxonomy_id = ' + prefix + 'term_taxonomy.term_taxonomy_id '
+
+            + 'WHERE ' + prefix + 'term_taxonomy.count > 0 '
+            + 'AND (' + prefix + 'term_taxonomy.taxonomy = "post_tag"  OR ' + prefix + 'term_taxonomy.taxonomy = "topic-tag") '
+
             + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+
         Exporter.query(query,
             function(err, rows) {
                 if (err) {
@@ -152,16 +162,17 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
                     return callback(err);
                 }
                 //normalize here
-                var map = {};
+                var topicsTagsMap = {};
                 rows.forEach(function(row) {
-                    row._title = row._title ? row._title[0].toUpperCase() + row._title.substr(1) : '';
-                    row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
-                    map[row._tid] = row;
+                    topicsTagsMap[row._tid] = topicsTagsMap[row._tid] || [];
+                    topicsTagsMap[row._tid].push(row._name);
                 });
-                callback(null, map);
+
+                // return a map of all topics with values each as an array of tags
+                callback(null, topicsTagsMap);
             });
     };
-    */
+
 
     Exporter.getTopics = function(callback) {
         return Exporter.getPaginatedTopics(0, -1, callback);
@@ -178,7 +189,6 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
             + prefix + 'posts.post_author as _uid, '
             + prefix + 'posts.post_date as _timestamp, '
             + prefix + 'posts.post_name as _slug, '
-
             + prefix + 'posts.post_status as _wp_status, '
             + prefix + 'posts.post_type as _wp_type, '
 
@@ -186,36 +196,40 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
 
             + 'FROM ' + prefix + 'posts '
 
-             // all this crap to get the _cid
-            + 'JOIN ' + prefix + 'terms '
-            + 'JOIN ' + prefix + 'term_taxonomy ON ' + prefix + 'term_taxonomy.term_id=' + prefix + 'terms.term_id '
-            + 'JOIN ' + prefix + 'term_relationships ON '
-            + prefix + 'term_relationships.term_taxonomy_id=' + prefix + 'term_taxonomy.term_taxonomy_id '
-            + 'AND ' + prefix + 'posts.ID = ' + prefix + 'term_relationships.object_id '
+                // all this crap to get the _cid
+            + 'LEFT JOIN ' + prefix + 'term_relationships '
+            + 'ON ' + prefix + 'posts.ID = ' + prefix + 'term_relationships.object_ID '
+            + 'LEFT JOIN ' + prefix + 'term_taxonomy '
+            + 'ON ' + prefix + 'term_relationships.term_taxonomy_id = ' + prefix + 'term_taxonomy.term_taxonomy_id '
+            + 'LEFT JOIN ' + prefix + 'terms '
+            + 'ON ' + prefix + 'terms.term_id = ' + prefix + 'term_taxonomy.term_id '
+            + 'WHERE ' + prefix + 'term_taxonomy.taxonomy = "category" '
 
-
-            + 'AND '
-             // + prefix + 'posts.post_parent=0+ AND ' // <-- do i even need? I dont know what this is :/
-            + prefix + 'posts.post_type="post" AND '
-            + prefix + 'posts.post_status="publish" '
+            + 'AND ' + prefix + 'posts.post_type="post" '
+            + 'AND ' + prefix + 'posts.post_status="publish" '
 
             + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
-        Exporter.query(query,
-            function(err, rows) {
-                if (err) {
-                    Exporter.error(err);
-                    return callback(err);
-                }
-                //normalize here
-                var map = {};
-                rows.forEach(function(row) {
-                    row._title = row._title ? row._title[0].toUpperCase() + row._title.substr(1) : '';
-                    row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
-                    map[row._tid] = row;
+        getTags(function(err, topicsTagsMap) {
+            Exporter.query(query,
+                function(err, rows) {
+                    if (err) {
+                        Exporter.error(err);
+                        return callback(err);
+                    }
+                    //normalize here
+                    var map = {};
+                    rows.forEach(function(row) {
+                        row._title = row._title ? row._title[0].toUpperCase() + row._title.substr(1) : '';
+                        row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
+                        row._tags = topicsTagsMap[row._tid] || undefined;
+
+                        map[row._tid] = row;
+                    });
+                    callback(null, map);
                 });
-                callback(null, map);
-            });
+        });
+
     };
 
     Exporter.getPosts = function(callback) {
@@ -234,6 +248,7 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
             + prefix + 'comments.user_id as _uid, '
             + prefix + 'comments.comment_date as _timestamp, '
             + prefix + 'comments.comment_author as _guest, '
+            + prefix + 'comments.comment_approved as _approved, '
             + prefix + 'comments.comment_author_email as _guest_email, '
             + prefix + 'comments.comment_author_IP as _ip '
             + 'FROM ' + prefix + 'comments '
@@ -248,6 +263,7 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
                 //normalize here
                 var map = {};
                 rows.forEach(function(row) {
+                    row._deleted = row._approved === 'spam' || !row._approved ? 1 : 0;
                     row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
                     map[row._pid] = row;
                 });
@@ -261,10 +277,10 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
             Exporter.error(err.error);
             return callback(err);
         }
-        // console.log('\n\n====QUERY====\n\n' + query + '\n');
+        console.log('\n\n====QUERY====\n\n' + query + '\n');
         Exporter.connection.query(query, function(err, rows) {
             if (rows) {
-           //     console.log('returned: ' + rows.length + ' results');
+                console.log('returned: ' + rows.length + ' results');
             }
             callback(err, rows)
         });
