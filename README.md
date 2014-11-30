@@ -56,11 +56,11 @@ i.e.:
 [gallery type="rectangular" ids="http://real.image.url.com/path/to/image/123.jpg,http://real.image.url.com/path/to/image/987.jpg,http://real.image.url.com/path/to/image/002.jpg" order="rand"]
 
 ```
-You can pass custom JSON value to the importer, in the __Exporter specific configs (JSON)__ field
+To do that, you can pass custom JSON value to the importer, in the __Exporter specific configs (JSON)__ field
 ```
 {"galleryShortcodes": "toURLs"}
 ```
-
+Then, on the client side (or even server side using NodeBB filter hooks), you can use something like this WP utility [wp.shortcode.js](https://github.com/a5mith/nodebb-plugin-import-wordpress/blob/master/wp.shortcode.js) to parse the shortcodes, instead of writing your own regular expression.
 
 ### Wordpress Versions tested on:
   - WP 4.0
