@@ -14,74 +14,53 @@ it doesn't really need to be, nor that you can use it within NodeBB it self, but
 * a nodebb- namespace, since you can't really use it for anything else
 * it can easily `require` NodeBB useful tools, currently
 
-### Usage within NodeJS only
 
+### [gallery] Shortcode note
+
+Since wordpress uses a `[gallery]` shortcode, this exporter, by default, will automatically replace the shortcodes with HTML
+
+For example, this
 ```
-// you don't have to do this, nodebb-plugin-import will require this plugin and use its api
-// but if you want a run a test
-
-var exporter = require('nodebb-plugin-import-wordpress');
-
-exporter.testrun({
-    dbhost: '127.0.0.1',
-    dbport: 3306,
-    dbname: 'wordpress',
-    dbuser: 'user',
-    dbpass: 'password',
-
-    tablePrefix: 'wp_'
-}, function(err, results) {
-
-    /*
-        results[0] > config
-        results[1] > [usersMap, usersArray]
-        results[2] > [categoriesMap, categoriesArray]
-        results[3] > [topicsMap, topicsArray]
-        results[4] > [postsMap, postsArray]
-    */
-});
-
+[gallery type="rectangular" ids="123,987,002" order="rand"]
 ```
 
-### What does it export?
-read carefully:
+will become
 
-- ####Users:
-    * `_username` YES. SMF for some reason allows duplicate users with same emails? so the first ones by ID orders will be saved, the rest will be skipped. (SMF appends [username]_dup[Number] next to the dups.. so those will be skipped too if the email is already used)
-    * `_alternativeUsername` YES. as the __SMF.User.UserDisplayName__, which [nodebb-plugin-import](https://github.com/akhoury/nodebb-plugin-import) will try to use if the username validation fails
-    * `_password` NO. SMF uses SHA-1, NodeBB uses bcrypt, so can't do, but if you use [nodebb-plugin-import](https://github.com/akhoury/nodebb-plugin-import) it will generate random passwords and hand them to you so can email them.
-    * `_level` (administrator and moderator) NO.
-    * `_joindate` YES, SMF uses Seconds, the exported will convert to Milliseconds
-    * `_website` NO.
-    * `_picture` NO.
-    * `_reputation` NO.
-    * `_profileviews` NO.
-    * `_location` NO.
-    * `_signature` NO.
-    * `_banned` YES. it will stay banned, by username
+```html
+<div class="imported-wp-gallery" data-content-index="123"
+         data-imported-wp-gallery-type="rectangular"
+         data-imported-wp-gallery-order="rand"
+         data-imported-wp-gallery-ids="123,987,002"
+>
+    <img class="imported-wp-gallery-img" data-id="123" src="http://real.image.url.com/path/to/image/123.jpg" />
+    <img class="imported-wp-gallery-img" data-id="987" src="http://real.image.url.com/path/to/image/987.jpg" />
+    <img class="imported-wp-gallery-img" data-id="002" src="http://real.image.url.com/path/to/image/002.jpg" />
+</div>
+```
+However, if you are converting HTML to Markdown via the Importer plugun and you're using Markdown plugin which strips
+all HTML classes and data-attribute, you won't see the the custom classes and stuff.
 
+if you dont like this solution, then you could
 
-- ####Categories (AKA Forums per SMF Speak):
-    * `_name` YES
-    * `_description` YES
+- Don't convert content from HTML to Markdown after the Import
+- Disable the HTML sanitization from the Markdown plugin options
+- Install this plugin, to stay safe https://github.com/akhoury/nodebb-plugin-sanitizehtml
+- Allow the class attribute on DIVs and on IMG tags in the Sanitize-HTML plugin options
 
-- ####Topics:
-    * `_cid` __(or its SMF category aka Forum id)__ YES (but if its parent Category is skipped, this topic gets skipped)
-    * `_uid` __(or its SMF user id)__ YES (but if its user is skipped, this topic gets skipped)
-    * `_title` YES
-    * `_content` __(or the 'parent-post` content of this topic)__ YES (HTML - read the [Markdown Note](#markdown-note) below)
-    * `_timestamp` YES, SMF uses Seconds, the exporter will convert to Milliseconds
-    * `_pinned` YES (0 or 1) (I don't know how many you can pin in NodeBB)
-    * `_approved` YES (0 or 1)
-    * `_locked` YES (0 or 1)
-    * `_viewcount` YES
+Then you can write whatever client-side JS to handle your gallery images however you want.
 
-- ####Posts:
-    * `_pid` __(or its SMF post id)__
-    * `_tid` __(or its SMF parent topic id)__ YES (but if its parent topic is skipped, this post gets skipped)
-    * `_uid` __(or its SMF user id)__ YES (but if its user is skipped, this post is skipped)
-    * `_content` YES (HTML - read the [Markdown Note](#markdown-note) below)
-    * `_timestamp` YES, SMF uses Seconds, the exporter will convert to Milliseconds
+#### Don't want `[gallery]` to HTML?
+if you want to keep the `[gallery]` shortcodes in the original post content, but replace the old ids `ids="123,456,789"` to urls,
+i.e.:
+```
+[gallery type="rectangular" ids="http://real.image.url.com/path/to/image/123.jpg,http://real.image.url.com/path/to/image/987.jpg,http://real.image.url.com/path/to/image/002.jpg" order="rand"]
+
+```
+You can pass custom JSON value to the importer, in the __Exporter specific configs (JSON)__ field
+```
+{"galleryShortcodes": "toURLs"}
+```
+
 
 ### Wordpress Versions tested on:
   - WP 4.0

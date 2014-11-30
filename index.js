@@ -4,7 +4,9 @@ var mysql = require('mysql');
 var moment = require('moment');
 var _ = require('underscore');
 var noop = function(){};
+
 var logPrefix = '[nodebb-plugin-import-wordpress]';
+var WPShortcode = require('./wp.shortcode').shortcode;
 
 (function(Exporter) {
 
@@ -23,6 +25,18 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
 
         Exporter.config(_config);
         Exporter.config('prefix', config.prefix || config.tablePrefix || '');
+
+        if (config.custom && typeof config.custom === 'string') {
+            try {
+                config.custom = JSON.parse(config.custom)
+            } catch (e) {
+                config.custom = null
+            }
+        }
+
+        Exporter.config('custom', config.custom || {
+            galleryShortcodes: 'toHTML'
+        });
 
         Exporter.connection = mysql.createConnection(_config);
         Exporter.connection.connect();
@@ -173,6 +187,93 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
             });
     };
 
+    var getAttachmentsIdsUrlsMap = function(callback) {
+        return getPaginatedAttachmentsIdsUrlsMap(0, -1, callback);
+    };
+
+    var getPaginatedAttachmentsIdsUrlsMap = function(start, limit, callback) {
+        callback = !_.isFunction(callback) ? noop : callback;
+        var prefix = Exporter.config('prefix');
+
+        var query =
+            'SELECT '
+            + prefix + 'posts.ID as _aid, '
+            + prefix + 'posts.post_parent as _tid, ' // i dont need this really right now
+            + prefix + 'posts.guid as _url '
+
+            + 'FROM ' + prefix + 'posts '
+            + 'WHERE '
+            + prefix + 'posts.post_type = "attachment" '
+            + 'AND ' + prefix + 'posts.post_mime_type like \'image%\' '
+            + 'AND ' + prefix + 'posts.post_parent > 0 '
+
+            + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+
+        Exporter.query(query,
+            function(err, rows) {
+                if (err) {
+                    Exporter.error(err);
+                    return callback(err);
+                }
+                //normalize here
+                var attachmentsIdsUrlsMap = {};
+                rows.forEach(function(row) {
+                    attachmentsIdsUrlsMap[row._aid] = row._url;
+                });
+
+                // return a map of all topics with values each as an array of tags
+                callback(null, attachmentsIdsUrlsMap);
+            });
+    };
+
+    var replaceGalleryTags = function(text, attachmentsIdsUrlsMap, galleryShortcodesSetting) {
+        // uncomment this line to disable auto replacement
+        // return text;
+
+        text = text || '';
+        attachmentsIdsUrlsMap = attachmentsIdsUrlsMap || {};
+        galleryShortcodesSetting = galleryShortcodesSetting || 'toHTML';
+
+        var result = WPShortcode.next('gallery', text);
+        var container = '';
+        while (result) {
+            if (result.shortcode && result.shortcode.attrs && result.shortcode.attrs.named) {
+                var ids = result.shortcode.attrs.named.ids || '';
+
+                if (galleryShortcodesSetting === 'toHTML') {
+                    container = '<div data-content-index="' + result.index + '" class="imported-wp-gallery" ';
+                    _.forEach(result.shortcode.attrs.named, function(value, key) {
+                        container += ' data-imported-wp-gallery-' + key + '="' +  value + '" '
+                    });
+                    container += '>';
+                    ids.split(',').forEach(function(id, i) {
+                        if (attachmentsIdsUrlsMap[id]) {
+                            container += '<img src="' + attachmentsIdsUrlsMap[id] + '" data-id="' + id + '" data-index="' + i + '" class="imported-wp-gallery-img" /> ' ;
+                        }
+                    });
+                    container += '</div>';
+
+                    text = text.replace(result.content, container);
+                    result = WPShortcode.next('gallery', text);
+
+                } else if (galleryShortcodesSetting == 'toURLs') {
+                    var urls = '';
+                    var idsArr = ids.split(',');
+                    idsArr.forEach(function(id, i) {
+                        if (attachmentsIdsUrlsMap[id]) {
+                            urls += attachmentsIdsUrlsMap[id] + (i === idsArr.length - 1 ? '' : ',');
+                        }
+                    });
+
+                    text = text.replace(result.shortcode.attrs.named.ids, urls);
+                    result = WPShortcode.next('gallery', text, result.index + result.content.length);
+                }
+            } else {
+                result = null;
+            }
+        }
+        return text;
+    };
 
     Exporter.getTopics = function(callback) {
         return Exporter.getPaginatedTopics(0, -1, callback);
@@ -180,6 +281,7 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
     Exporter.getPaginatedTopics = function(start, limit, callback) {
         callback = !_.isFunction(callback) ? noop : callback;
         var prefix = Exporter.config('prefix');
+        var galleryShortcodesSetting = Exporter.config('custom').galleryShortcodes;
         var startms = +new Date();
         var query =
             'SELECT '
@@ -210,26 +312,27 @@ var logPrefix = '[nodebb-plugin-import-wordpress]';
 
             + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
-        getTags(function(err, topicsTagsMap) {
-            Exporter.query(query,
-                function(err, rows) {
-                    if (err) {
-                        Exporter.error(err);
-                        return callback(err);
-                    }
-                    //normalize here
-                    var map = {};
-                    rows.forEach(function(row) {
-                        row._title = row._title ? row._title[0].toUpperCase() + row._title.substr(1) : '';
-                        row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
-                        row._tags = topicsTagsMap[row._tid] || undefined;
-
-                        map[row._tid] = row;
+        getAttachmentsIdsUrlsMap(function(err, attachmentsIdsUrlsMap) {
+            getTags(function(err, topicsTagsMap) {
+                Exporter.query(query,
+                    function(err, rows) {
+                        if (err) {
+                            Exporter.error(err);
+                            return callback(err);
+                        }
+                        //normalize here
+                        var map = {};
+                        rows.forEach(function(row) {
+                            row._title = row._title ? row._title[0].toUpperCase() + row._title.substr(1) : '';
+                            row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
+                            row._tags = topicsTagsMap[row._tid] || undefined;
+                            row._content = replaceGalleryTags(row._content, attachmentsIdsUrlsMap, galleryShortcodesSetting);
+                            map[row._tid] = row;
+                        });
+                        callback(null, map);
                     });
-                    callback(null, map);
-                });
+            });
         });
-
     };
 
     Exporter.getPosts = function(callback) {
