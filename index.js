@@ -55,7 +55,11 @@ var WPShortcode = require('./wp.shortcode').shortcode;
             + prefix + 'users.ID as _uid, '
             + prefix + 'users.user_nicename as _username, '
             + prefix + 'users.user_login as _alternativeUsername, '
+
             + prefix + 'users.user_pass as _password, '
+            // passwords import not supported yet, but let's save the MD5 password anyways
+            // https://github.com/akhoury/nodebb-plugin-import/issues/64
+
             + prefix + 'users.user_email as _registrationEmail, '
             + prefix + 'users.user_email as _email, '
             + prefix + 'users.user_registered as _joindate, '
