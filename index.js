@@ -64,13 +64,20 @@ var WPShortcode = require('./wp.shortcode').shortcode;
             + prefix + 'users.user_email as _email, '
             + prefix + 'users.user_registered as _joindate, '
             + prefix + 'users.user_url as _website, '
-            + prefix + 'usermeta.meta_value as _wp_capabilities '
-            + 'FROM ' + prefix + 'users '
-            + 'LEFT JOIN ' + prefix + 'usermeta ON ' + prefix + 'usermeta.user_id=' + prefix + 'users.ID '
 
-            + 'WHERE ' + prefix + 'users.ID = ' + prefix + 'users.ID '
-            + 'AND ' + prefix + 'usermeta.meta_key="wp_capabilities" '
-            + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+            // no prefix here, see below
+            + 'wp_capabilities.meta_value as _wp_capabilities, '
+            + 'last_activity.meta_value as _lastonline, '
+            + 'description.meta_value as _signature '
+
+            + 'FROM wp_users '
+
+            + 'JOIN ' + prefix + 'usermeta AS wp_capabilities ON wp_capabilities.user_id=' + prefix + 'users.ID AND wp_capabilities.meta_key="wp_capabilities" '
+            + 'LEFT JOIN ' + prefix + 'usermeta AS last_activity ON last_activity.user_id=' + prefix + 'users.ID AND last_activity.meta_key="last_activity" '
+            + 'LEFT JOIN ' + prefix + 'usermeta AS description ON description.user_id=' + prefix + 'users.ID AND description.meta_key="description" '
+
+
+            + (start >= 0 && limit >= 0 ? ' LIMIT ' + start + ',' + limit : '');
 
         Exporter.query(query,
             function(err, rows) {
@@ -81,11 +88,11 @@ var WPShortcode = require('./wp.shortcode').shortcode;
                 //normalize here
                 var map = {};
                 rows.forEach(function(row) {
-                    // nbb forces signatures to be less than 150 chars
-                    row._signature = Exporter.truncateStr(row._signature || '', 150);
+                    row._signature = row._signature || '';
 
                     // from ISO date to timestamp (ms)
                     row._joindate = row._joindate ? moment(row._joindate).unix() * 1000 : startms;
+                    row._lastonline = row._lastonline ? moment(row._lastonline).unix() * 1000 : undefined;
 
                     // lower case the email for consistency
                     row._email = (row._email || '').toLowerCase();
