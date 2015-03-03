@@ -35,7 +35,10 @@ var WPShortcode = require('./wp.shortcode').shortcode;
         }
 
         Exporter.config('custom', config.custom || {
-            galleryShortcodes: 'toHTML'
+            galleryShortcodes: 'toHTML',
+
+            // bbpress used 2.5.4
+            bbpress: false
         });
 
         Exporter.connection = mysql.createConnection(_config);
@@ -117,18 +120,36 @@ var WPShortcode = require('./wp.shortcode').shortcode;
         callback = !_.isFunction(callback) ? noop : callback;
 
         var prefix = Exporter.config('prefix');
+        var custom = Exporter.config('custom');
         var startms = +new Date();
 
-        var query = 'SELECT '
-            + prefix + 'terms.term_id as _cid, '
-            + prefix + 'terms.name as _name, '
-            + prefix + 'terms.slug as _slug, '
-            + prefix + 'term_taxonomy.description as _description, '
-            + prefix + 'term_taxonomy.parent as _parentCid '
-            + 'FROM ' + prefix + 'terms '
-            + 'LEFT JOIN ' + prefix + 'term_taxonomy ON ' + prefix + 'term_taxonomy.term_id=' + prefix + 'terms.term_id '
-            + 'WHERE ' + prefix + 'term_taxonomy.taxonomy="category" '
-            + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+        var query = 'SELECT ';
+        if (custom && custom.bbpress) {
+            // if bbpress
+            query += ''
+            + prefix + 'posts.ID as _cid, '
+            + prefix + 'posts.post_title as _name, '
+            + prefix + 'posts.post_name as _slug, '
+            + prefix + 'posts.post_content as _description, '
+            + prefix + 'posts.menu_order as _order, '
+            + prefix + 'posts.post_date as _timestamp, '
+            + prefix + 'posts.post_status as _wp_status, '
+            + prefix + 'posts.post_parent as _parentCid '
+            + 'FROM ' + prefix + 'posts '
+            + 'WHERE ' + prefix + 'posts.post_type="forum" '
+        } else {
+            // if core wp
+            query += ''
+                + prefix + 'terms.term_id as _cid, '
+                + prefix + 'terms.name as _name, '
+                + prefix + 'terms.slug as _slug, '
+                + prefix + 'term_taxonomy.description as _description, '
+                + prefix + 'term_taxonomy.parent as _parentCid '
+                + 'FROM ' + prefix + 'terms '
+                + 'LEFT JOIN ' + prefix + 'term_taxonomy ON ' + prefix + 'term_taxonomy.term_id=' + prefix + 'terms.term_id '
+                + 'WHERE ' + prefix + 'term_taxonomy.taxonomy="category" ';
+        }
+        query += (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
         Exporter.query(query,
             function(err, rows) {
@@ -140,7 +161,8 @@ var WPShortcode = require('./wp.shortcode').shortcode;
                 rows.forEach(function(row, i) {
                     row._name = row._name || ('Category ' + (i + 1));
                     row._description = row._description || 'No description available';
-                    row._timestamp = ((row._timestamp || 0) * 1000) || startms;
+                    row._disabled = row._wp_status === "private" || row._wp_status === "hidden" ? 1 : 0 ;
+                    row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
                     map[row._cid] = row;
                 });
                 callback(null, map);
@@ -158,10 +180,10 @@ var WPShortcode = require('./wp.shortcode').shortcode;
     };
     var getPaginatedTags = function(start, limit, callback) {
         callback = !_.isFunction(callback) ? noop : callback;
+
         var prefix = Exporter.config('prefix');
 
-        var query =
-            'SELECT '
+        var query = 'SELECT '
             + prefix + 'terms.term_id as _tag_id, '
             + prefix + 'terms.name as _name, '
             + prefix + 'terms.slug as _slug, '
@@ -177,7 +199,6 @@ var WPShortcode = require('./wp.shortcode').shortcode;
 
             + 'WHERE ' + prefix + 'term_taxonomy.count > 0 '
             + 'AND (' + prefix + 'term_taxonomy.taxonomy = "post_tag"  OR ' + prefix + 'term_taxonomy.taxonomy = "topic-tag") '
-
             + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
         Exporter.query(query,
@@ -292,10 +313,28 @@ var WPShortcode = require('./wp.shortcode').shortcode;
     Exporter.getPaginatedTopics = function(start, limit, callback) {
         callback = !_.isFunction(callback) ? noop : callback;
         var prefix = Exporter.config('prefix');
+        var custom = Exporter.config('custom');
         var galleryShortcodesSetting = Exporter.config('custom').galleryShortcodes;
         var startms = +new Date();
-        var query =
-            'SELECT '
+
+        var query = 'SELECT ';
+        if (custom && custom.bbpress) {
+            // if bbpress
+            query += ''
+            + prefix + 'posts.ID as _tid, '
+            + prefix + 'posts.post_author as _uid, '
+            + prefix + 'posts.post_parent as _cid, '
+            + prefix + 'posts.post_title as _title, '
+            + prefix + 'posts.post_content as _content, '
+            + prefix + 'posts.post_date as _timestamp, '
+            + prefix + 'posts.post_name as _slug, '
+            + prefix + 'posts.post_status as _wp_status, '
+            + prefix + 'posts.post_type as _wp_type '
+
+            + 'FROM ' + prefix + 'posts '
+            + 'WHERE ' + prefix + 'posts.post_type="topic" '
+        } else {
+            query += ''
             + prefix + 'posts.ID as _tid, '
             + prefix + 'posts.post_title as _title, '
             + prefix + 'posts.post_content as _content, '
@@ -320,8 +359,8 @@ var WPShortcode = require('./wp.shortcode').shortcode;
 
             + 'AND ' + prefix + 'posts.post_type="post" '
             + 'AND ' + prefix + 'posts.post_status="publish" '
-
-            + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+        }
+        query += (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
         getAttachmentsIdsUrlsMap(function(err, attachmentsIdsUrlsMap) {
             getTags(function(err, topicsTagsMap) {
@@ -353,9 +392,25 @@ var WPShortcode = require('./wp.shortcode').shortcode;
         callback = !_.isFunction(callback) ? noop : callback;
 
         var prefix = Exporter.config('prefix');
+        var custom = Exporter.config('custom');
         var startms = +new Date();
-        var query =
-            'SELECT '
+
+        var query = 'SELECT ';
+        if (custom && custom.bbpress) {
+            // if bbpress
+            query += ''
+            + prefix + 'posts.ID as _pid, '
+            + prefix + 'posts.post_author as _uid, '
+            + prefix + 'posts.post_parent as _tid, '
+            + prefix + 'posts.post_content as _content, '
+            + prefix + 'posts.post_date as _timestamp, '
+            + prefix + 'posts.post_status as _wp_status, '
+            + prefix + 'posts.post_type as _wp_type '
+
+            + 'FROM ' + prefix + 'posts '
+            + 'WHERE ' + prefix + 'posts.post_type="reply" ';
+        } else {
+            query += ''
             + prefix + 'comments.comment_ID as _pid, '
             + prefix + 'comments.comment_post_ID as _tid, '
             + prefix + 'comments.comment_content as _content, '
@@ -365,8 +420,10 @@ var WPShortcode = require('./wp.shortcode').shortcode;
             + prefix + 'comments.comment_approved as _approved, '
             + prefix + 'comments.comment_author_email as _guest_email, '
             + prefix + 'comments.comment_author_IP as _ip '
-            + 'FROM ' + prefix + 'comments '
-            + (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
+            + 'FROM ' + prefix + 'comments ';
+        }
+
+        query += (start >= 0 && limit >= 0 ? 'LIMIT ' + start + ',' + limit : '');
 
         Exporter.query(query,
             function(err, rows) {
@@ -377,7 +434,7 @@ var WPShortcode = require('./wp.shortcode').shortcode;
                 //normalize here
                 var map = {};
                 rows.forEach(function(row) {
-                    row._deleted = row._approved === 'spam' || !row._approved ? 1 : 0;
+                    row._deleted = row._wp_status ? row._wp_status === "publish" ? 0 : 1 : row._approved === 'spam' || !row._approved ? 1 : 0;
                     row._timestamp = row._timestamp ? moment(row._timestamp).unix() * 1000 : startms;
                     map[row._pid] = row;
                 });
@@ -391,11 +448,8 @@ var WPShortcode = require('./wp.shortcode').shortcode;
             Exporter.error(err.error);
             return callback(err);
         }
-        console.log('\n\n====QUERY====\n\n' + query + '\n');
+        //console.log('\n\n====QUERY====\n\n' + query + '\n');
         Exporter.connection.query(query, function(err, rows) {
-            if (rows) {
-                console.log('returned: ' + rows.length + ' results');
-            }
             callback(err, rows)
         });
     };

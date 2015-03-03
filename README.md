@@ -14,6 +14,13 @@ it doesn't really need to be, nor that you can use it within NodeBB it self, but
 * a nodebb- namespace, since you can't really use it for anything else
 * it can easily `require` NodeBB useful tools, currently
 
+### BBPress
+
+in order to migrate your BBPress forum instead of the core WP stuff, just enter the following in the "Exporter specific configs"
+```
+{"bbpress": true}
+```
+![img](http://i.imgur.com/Je6aJX7.png)
 
 ### [gallery] Shortcode note
 
