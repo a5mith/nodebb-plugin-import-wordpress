@@ -73,7 +73,7 @@ var WPShortcode = require('./wp.shortcode').shortcode;
             + 'last_activity.meta_value as _lastonline, '
             + 'description.meta_value as _signature '
 
-            + 'FROM wp_users '
+            + 'FROM ' + prefix + 'users '
 
             + 'JOIN ' + prefix + 'usermeta AS wp_capabilities ON wp_capabilities.user_id=' + prefix + 'users.ID AND wp_capabilities.meta_key="wp_capabilities" '
             + 'LEFT JOIN ' + prefix + 'usermeta AS last_activity ON last_activity.user_id=' + prefix + 'users.ID AND last_activity.meta_key="last_activity" '
