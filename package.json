@@ -1,7 +1,7 @@
 
 {
     "name": "nodebb-plugin-import-wordpress",
-    "version": "0.1.7",
+    "version": "0.1.8",
     "description": "Export your Wordpress sites posts and comments into NodeBB",
     "main": "./index.js",
     "scripts": {
