@@ -68,7 +68,7 @@ var WPShortcode = require('./wp.shortcode').shortcode;
             + prefix + 'users.user_registered as _joindate, '
             + prefix + 'users.user_url as _website, '
 
-            + preifx + 'capabilities.meta_value as _wp_capabilities, '
+            + prefix + 'capabilities.meta_value as _wp_capabilities, '
             + 'last_activity.meta_value as _lastonline, '
             + 'description.meta_value as _signature '
 
