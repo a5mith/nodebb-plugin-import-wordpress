@@ -68,14 +68,13 @@ var WPShortcode = require('./wp.shortcode').shortcode;
             + prefix + 'users.user_registered as _joindate, '
             + prefix + 'users.user_url as _website, '
 
-            // no prefix here, see below
-            + 'wp_capabilities.meta_value as _wp_capabilities, '
+            + preifx + 'capabilities.meta_value as _wp_capabilities, '
             + 'last_activity.meta_value as _lastonline, '
             + 'description.meta_value as _signature '
 
             + 'FROM ' + prefix + 'users '
 
-            + 'JOIN ' + prefix + 'usermeta AS wp_capabilities ON wp_capabilities.user_id=' + prefix + 'users.ID AND wp_capabilities.meta_key="wp_capabilities" '
+            + 'LEFT JOIN ' + prefix + 'usermeta AS wp_capabilities ON wp_capabilities.user_id=' + prefix + 'users.ID AND wp_capabilities.meta_key="wp_capabilities" '
             + 'LEFT JOIN ' + prefix + 'usermeta AS last_activity ON last_activity.user_id=' + prefix + 'users.ID AND last_activity.meta_key="last_activity" '
             + 'LEFT JOIN ' + prefix + 'usermeta AS description ON description.user_id=' + prefix + 'users.ID AND description.meta_key="description" '
 
