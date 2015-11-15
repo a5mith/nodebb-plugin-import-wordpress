@@ -74,7 +74,7 @@ var WPShortcode = require('./wp.shortcode').shortcode;
 
             + 'FROM ' + prefix + 'users '
 
-            + 'LEFT JOIN ' + prefix + 'usermeta AS wp_capabilities ON wp_capabilities.user_id=' + prefix + 'users.ID AND wp_capabilities.meta_key="wp_capabilities" '
+            + 'LEFT JOIN ' + prefix + 'usermeta AS ' + prefix + 'capabilities ON ' + prefix + 'capabilities.user_id=' + prefix + 'users.ID AND ' + prefix + 'capabilities.meta_key="' + prefix + 'capabilities" '
             + 'LEFT JOIN ' + prefix + 'usermeta AS last_activity ON last_activity.user_id=' + prefix + 'users.ID AND last_activity.meta_key="last_activity" '
             + 'LEFT JOIN ' + prefix + 'usermeta AS description ON description.user_id=' + prefix + 'users.ID AND description.meta_key="description" '
 
